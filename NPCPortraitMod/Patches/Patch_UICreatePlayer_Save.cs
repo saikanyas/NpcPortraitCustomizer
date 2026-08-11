@@ -44,6 +44,16 @@ namespace NPCPortraitMod.Patches
                             var newModel = __instance.uiFacade.portraitModel.data;
                             var targetModel = npc.data.dynUnitData.modelData;
 
+                            if (newModel.sex != 0)
+                            {
+                                targetModel.sex = newModel.sex;
+                                if (npc.data != null && npc.data.unitData != null && npc.data.unitData.propertyData != null)
+                                {
+                                    npc.data.unitData.propertyData.sex = (UnitSexType)newModel.sex;
+                                    ModLogger.Info("[Save]", $"Updated NPC sex: {newModel.sex}");
+                                }
+                            }
+
                             targetModel.hat = newModel.hat;
                             targetModel.hair = newModel.hair;
                             targetModel.hairFront = newModel.hairFront;
@@ -170,6 +180,8 @@ namespace NPCPortraitMod.Patches
                                 WorldUnitBase.CreateConf(npc.data.unitData);
                             }
 
+                            RefreshMapAndTownNpcPortraits(npc);
+
                             ModLogger.Info("[Save]", "Successfully updated portrait model and name for NPC: " + npcId);
                         }
 
@@ -209,6 +221,25 @@ namespace NPCPortraitMod.Patches
                                     ui.InitData(npc, false);
                                 }
                             }
+                            else
+                            {
+                                try
+                                {
+                                    var mapMain = g.ui.GetUI<UIMapMain>(UIType.MapMain);
+                                    if (mapMain != null && mapMain.uiPlayerInfo != null)
+                                    {
+                                        try { mapMain.uiPlayerInfo.ResetUnitModel(); } catch { }
+                                        try { mapMain.uiPlayerInfo.UpdateUI(); } catch { }
+                                        try { mapMain.uiPlayerInfo.UpdatePlayerInfo(); } catch { }
+                                        try { mapMain.uiPlayerInfo.CorUpdateInfo(); } catch { }
+                                        ModLogger.Info("[Save]", "Successfully updated mapMain.uiPlayerInfo for player.");
+                                    }
+                                }
+                                catch (Exception pEx)
+                                {
+                                    ModLogger.Warn("[Save]", "Error refreshing player bottom-left info: " + pEx.Message);
+                                }
+                            }
                         }
                     }
                     catch (Exception e)
@@ -225,6 +256,47 @@ namespace NPCPortraitMod.Patches
                 }
 
                 return true;
+            }
+
+            private static void RefreshMapAndTownNpcPortraits(WorldUnitBase npc)
+            {
+                try
+                {
+                    if (g.world != null && g.world.playerUnit != null)
+                    {
+                        Vector2Int pPoint = (npc != null && npc.data != null && npc.data.unitData != null)
+                            ? npc.data.unitData.GetPoint()
+                            : ((g.world.playerUnit != null && g.world.playerUnit.data != null && g.world.playerUnit.data.unitData != null) ? g.world.playerUnit.data.unitData.GetPoint() : Vector2Int.zero);
+
+                        var mapMains = UnityEngine.Object.FindObjectsOfType<UIMapMain>();
+                        if (mapMains != null)
+                        {
+                            foreach (var mm in mapMains)
+                            {
+                                if (mm == null) continue;
+                                try { mm.UpdateOpgroupUnitList(); } catch { }
+                            }
+                        }
+
+                        var allListItems = UnityEngine.Object.FindObjectsOfType<UINPCUnitInfoListItem>();
+                        if (allListItems != null)
+                        {
+                            foreach (var item in allListItems)
+                            {
+                                if (item == null) continue;
+                                try { item.InitData(pPoint); } catch { }
+                                try { item.UpdateUI(); } catch { }
+                                try { item.OnUpdateList(); } catch { }
+                            }
+                        }
+
+                        ModLogger.Info("[Save]", "Refreshed map & town NPC avatar icons.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    ModLogger.Warn("[Save]", "Error refreshing map/town portraits: " + ex.Message);
+                }
             }
         }
     }

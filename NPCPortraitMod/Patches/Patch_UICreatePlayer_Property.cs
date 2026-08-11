@@ -2,6 +2,7 @@ using HarmonyLib;
 using UnityEngine;
 using TMPro;
 using System;
+using System.Collections.Generic;
 
 namespace NPCPortraitMod.Patches
 {
@@ -10,41 +11,129 @@ namespace NPCPortraitMod.Patches
     /// </summary>
     public static class Patch_UICreatePlayer_Property
     {
-        // After RandomProperty picks random traits, overwrite selectLuck with NPC traits
-        [HarmonyPatch(typeof(UICreatePlayerProperty), "RandomProperty")]
-        public static class Patch_UICreatePlayerProperty_RandomProperty
+        private static bool _isSyncingTraits = false;
+
+        // Static trait ID to name mapping fallback for English and Chinese locales
+        public static readonly Dictionary<int, string[]> TraitNameMap = new Dictionary<int, string[]>()
         {
-            public static void Postfix(UICreatePlayerProperty __instance)
+            { 1,  new[] { "Selfless", "无私" } },
+            { 2,  new[] { "Upstanding", "正直" } },
+            { 3,  new[] { "Kind", "仁慈" } },
+            { 4,  new[] { "Middle Way", "中庸" } },
+            { 5,  new[] { "Wicked", "狂妄" } },
+            { 6,  new[] { "Selfish", "利己" } },
+            { 7,  new[] { "Evil", "邪恶" } },
+            { 8,  new[] { "Caring", "重情" } },
+            { 9,  new[] { "Loyal to friends", "义气" } },
+            { 10, new[] { "Protective", "护短" } },
+            { 11, new[] { "Self-centered", "孤僻" } },
+            { 12, new[] { "Family-Oriented", "爱护后辈" } },
+            { 13, new[] { "Glory Hound", "名气" } },
+            { 14, new[] { "Power-hungry", "权利" } },
+            { 15, new[] { "Vengeful", "报复" } },
+            { 16, new[] { "Carefree", "随性" } },
+            { 17, new[] { "Romantic", "情种" } },
+            { 18, new[] { "Traditional", "传承" } },
+            { 19, new[] { "Faithful", "忠贞" } }
+        };
+
+        // Helper to sync UI trait toggles directly with NPC traits
+        public static void SyncTraitToggles(Component uiComponent, DataUnit.PropertyData np)
+        {
+            if (_isSyncingTraits) return; // Prevent recursive re-entry loop
+            if (uiComponent == null || np == null) return;
+
+            try
             {
-                if (string.IsNullOrEmpty(ModMain.EditingNpcId)) return;
+                _isSyncingTraits = true;
+                List<string> activeNames = new List<string>();
 
-                var npc = g.world.unit.GetUnit(ModMain.EditingNpcId);
-                if (npc == null || npc.data == null || npc.data.unitData == null) return;
-
-                var np = npc.data.unitData.propertyData;
-                if (np == null) return;
-
-                var selectLuck = __instance.selectLuck;
-                ModLogger.Info("[Traits]", $"RandomProperty: NPC inTrait={np.inTrait}, out1={np.outTrait1}, out2={np.outTrait2}, selectLuck={(selectLuck == null ? "null" : selectLuck.Count.ToString())}");
-
-                if (selectLuck != null && selectLuck.Count >= 3)
+                int[] traitIds = new int[] { np.inTrait, np.outTrait1, np.outTrait2 };
+                foreach (int tid in traitIds)
                 {
-                    try
-                    {
-                        if (np.inTrait  != 0 && selectLuck[0]?.luckData != null) selectLuck[0].luckData.id = np.inTrait;
-                        if (np.outTrait1 != 0 && selectLuck[1]?.luckData != null) selectLuck[1].luckData.id = np.outTrait1;
-                        if (np.outTrait2 != 0 && selectLuck[2]?.luckData != null) selectLuck[2].luckData.id = np.outTrait2;
+                    if (tid == 0) continue;
 
-                        // Sync UI toggle highlights from updated selectLuck
-                        try { __instance.UpdatePlayerBornLuckData(); }
-                        catch (Exception ex) { ModLogger.Warn("[Traits]", "UpdatePlayerBornLuckData error: " + ex.Message); }
+                    // Try lookup via game configuration
+                    if (g.conf != null && g.conf.roleCreateFeature != null)
+                    {
+                        var item = g.conf.roleCreateFeature.GetItem(tid);
+                        if (item != null && !string.IsNullOrEmpty(item.name))
+                        {
+                            string locName = GameTool.LS(item.name);
+                            if (!string.IsNullOrEmpty(locName)) activeNames.Add(locName.Trim());
+                        }
                     }
-                    catch (Exception ex) { ModLogger.Warn("[Traits]", "selectLuck set error: " + ex.Message); }
+
+                    // Fallback to static mapping if localized name lookup was empty
+                    if (TraitNameMap.TryGetValue(tid, out var mapNames))
+                    {
+                        foreach (var name in mapNames)
+                        {
+                            if (!activeNames.Contains(name)) activeNames.Add(name);
+                        }
+                    }
                 }
+
+                ModLogger.Info("[Traits]", $"SyncTraitToggles: Active NPC traits = [{string.Join(", ", activeNames)}] (in={np.inTrait}, out1={np.outTrait1}, out2={np.outTrait2})");
+
+                var toggles = uiComponent.GetComponentsInChildren<UnityEngine.UI.Toggle>(true);
+                if (toggles != null && toggles.Length > 0)
+                {
+                    foreach (var tgl in toggles)
+                    {
+                        if (tgl == null) continue;
+
+                        var textObj = tgl.GetComponentInChildren<UnityEngine.UI.Text>(true);
+                        var tmpTextObj = tgl.GetComponentInChildren<TMP_Text>(true);
+                        string label = textObj != null ? textObj.text : (tmpTextObj != null ? tmpTextObj.text : "");
+
+                        if (string.IsNullOrEmpty(label)) continue;
+                        label = label.Trim();
+
+                        bool shouldBeOn = false;
+                        foreach (var activeName in activeNames)
+                        {
+                            if (string.Equals(label, activeName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                shouldBeOn = true;
+                                break;
+                            }
+                        }
+
+                        // Only toggle traits (skip sex / appearance toggles)
+                        bool isTraitToggle = false;
+                        foreach (var kvp in TraitNameMap)
+                        {
+                            foreach (var n in kvp.Value)
+                            {
+                                if (string.Equals(label, n, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    isTraitToggle = true;
+                                    break;
+                                }
+                            }
+                            if (isTraitToggle) break;
+                        }
+
+                        if (isTraitToggle && tgl.isOn != shouldBeOn)
+                        {
+                            tgl.isOn = shouldBeOn;
+                            ModLogger.Info("[Traits]", $"  Trait toggle '{label}' -> isOn={shouldBeOn}");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Warn("[Traits]", "Error in SyncTraitToggles: " + ex.Message);
+            }
+            finally
+            {
+                _isSyncingTraits = false;
             }
         }
 
-        // Lock Age, Life to NPC values before UpdatePropertyUI renders
+        // Lock Age, Life, and Traits to NPC values before UpdatePropertyUI renders
         [HarmonyPatch(typeof(UICreatePlayerProperty), "UpdatePropertyUI")]
         public static class Patch_UICreatePlayerProperty_UpdatePropertyUI
         {
@@ -65,21 +154,31 @@ namespace NPCPortraitMod.Patches
                 var np = npc.data.unitData.propertyData;
                 if (pp == null || np == null) return;
 
-                pp.age    = np.age;
-                pp.life   = np.life;
-                pp.beauty = np.beauty;
+                pp.age       = np.age;
+                pp.life      = np.life;
+                pp.beauty    = np.beauty;
+                pp.inTrait   = np.inTrait;
+                pp.outTrait1 = np.outTrait1;
+                pp.outTrait2 = np.outTrait2;
             }
         }
 
-        // Keeps UI Name InputField synchronized with NPC full name every frame
+        // Keeps UI Name InputFields and Trait toggles synchronized with NPC
         [HarmonyPatch(typeof(UICreatePlayer), "Update")]
         public static class Patch_UICreatePlayer_Update
         {
-            private static int _logThrottle = 0;
+            public static string LastInitializedNpcId = null;
 
             public static void Postfix(UICreatePlayer __instance)
             {
-                if (string.IsNullOrEmpty(ModMain.EditingNpcId)) return;
+                if (string.IsNullOrEmpty(ModMain.EditingNpcId))
+                {
+                    LastInitializedNpcId = null;
+                    return;
+                }
+
+                // Only initialize input fields and trait toggles once per NPC customization session
+                if (LastInitializedNpcId == ModMain.EditingNpcId) return;
 
                 var npc = g.world.unit.GetUnit(ModMain.EditingNpcId);
                 if (npc == null || npc.data == null || npc.data.unitData == null) return;
@@ -87,16 +186,36 @@ namespace NPCPortraitMod.Patches
                 try
                 {
                     var prop = npc.data.unitData.propertyData;
+                    if (prop == null) return;
+
+                    string surname = "";
+                    string givenName = "";
                     string fullName = "";
+
                     try { fullName = prop.GetName(); } catch { }
 
-                    _logThrottle++;
-                    bool shouldLog = (_logThrottle % 300 == 1); // log every ~5 seconds
+                    if (prop.name != null && prop.name.Length >= 2)
+                    {
+                        surname = prop.name[0] ?? "";
+                        givenName = (prop.name[1] ?? "").Trim();
+                    }
 
-                    // Handle TMP_InputField (which the game uses)
+                    if (string.IsNullOrEmpty(surname) && string.IsNullOrEmpty(givenName) && !string.IsNullOrEmpty(fullName))
+                    {
+                        var parts = fullName.Trim().Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length >= 2)
+                        {
+                            surname = parts[0];
+                            givenName = string.Join(" ", parts, 1, parts.Length - 1);
+                        }
+                        else
+                        {
+                            givenName = fullName;
+                        }
+                    }
+
                     var tmpInputs = __instance.GetComponentsInChildren<TMP_InputField>(true);
-                    if (shouldLog)
-                        ModLogger.Info("[Name]", $"TMP InputField count={tmpInputs?.Length ?? 0}, NPC='{fullName}'");
+                    ModLogger.Info("[Name]", $"Initializing InputFields for NPC '{ModMain.EditingNpcId}': Surname='{surname}', GivenName='{givenName}', Full='{fullName}' (inputs count={tmpInputs?.Length ?? 0})");
 
                     if (tmpInputs != null && tmpInputs.Length > 0)
                     {
@@ -104,16 +223,34 @@ namespace NPCPortraitMod.Patches
                         {
                             if (input == null) continue;
                             string objName = input.gameObject.name.ToLower();
-                            if (shouldLog)
-                                ModLogger.Info("[Name]", $"  TMP GO='{input.gameObject.name}'");
+                            ModLogger.Info("[Name]", $"  Setting TMP GO='{input.gameObject.name}'");
 
-                            if (objName.Contains("family") || objName.Contains("sur")) input.text = "";
-                            else if (objName.Contains("name")) input.text = fullName;
-                            else input.text = fullName; // fallback: set all remaining fields to full name
+                            try { input.interactable = true; } catch { }
+
+                            if (objName.Contains("family") || objName.Contains("sur"))
+                            {
+                                input.text = surname;
+                            }
+                            else if (objName.EndsWith("_en") || objName.Contains("given") || objName.Contains("first"))
+                            {
+                                input.text = givenName;
+                            }
+                            else
+                            {
+                                input.text = fullName;
+                            }
                         }
                     }
+
+                    // Sync trait toggles ONCE on UI initialization
+                    SyncTraitToggles(__instance, prop);
+
+                    LastInitializedNpcId = ModMain.EditingNpcId;
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    ModLogger.Warn("[Name]", "Error initializing name/trait inputs: " + ex.Message);
+                }
             }
         }
     }

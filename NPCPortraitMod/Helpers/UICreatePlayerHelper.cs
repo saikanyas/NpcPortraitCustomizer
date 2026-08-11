@@ -26,7 +26,7 @@ namespace NPCPortraitMod.Helpers
                         item.index = i;
                         try { item.SetValue(v.dressID); } catch { }
                         try { item.SetValueInID(v.id); } catch { }
-                        ModLogger.Debug("[Face-Match]", $"Category '{categoryName}' (TargetId: {targetDressId}) -> MATCHED at index {i}: v.dressID={v.dressID}, v.id={v.id}, v.name='{v.name}'");
+                        ModLogger.Info("[Face-Match]", $"Category '{categoryName}' (TargetId: {targetDressId}) -> MATCHED at index {i}: v.dressID={v.dressID}, v.id={v.id}, v.name='{v.name}'");
                         return true;
                     }
                 }
@@ -76,7 +76,7 @@ namespace NPCPortraitMod.Helpers
                     item.index = newIndex;
                     try { item.SetValue(addVal.dressID); } catch { }
                     try { item.SetValueInID(addVal.id); } catch { }
-                    ModLogger.Debug("[Face-Match]", $"Appended missing item '{categoryName}' (ID: {targetDressId}) at index {newIndex}");
+                    ModLogger.Info("[Face-Match]", $"Appended missing item '{categoryName}' (ID: {targetDressId}) at index {newIndex}");
                     return true;
                 }
 
@@ -85,9 +85,9 @@ namespace NPCPortraitMod.Helpers
                 for (int k = 0; k < limit; k++)
                 {
                     var v = item.values[k];
-                    if (v != null) sb.Append($"[{k}:dID={v.dressID},id={v.id}] ");
+                    sb.Append($"[{k}]: id={v.id}, dressID={v.dressID}, name='{v.name}' | ");
                 }
-                ModLogger.Warn("[Face-Match]", $"Category '{categoryName}' (TargetId: {targetDressId}) -> NOT FOUND in {item.values.Count} options. Forced to default index {defaultIndex}. First {limit}: {sb}");
+                ModLogger.Info("[Face-Match]", $"Category '{categoryName}' (TargetId: {targetDressId}) -> NOT FOUND in {item.values.Count} options. Forced to default index {defaultIndex}. First {limit}: {sb}");
                 return false;
             }
             else
@@ -114,6 +114,8 @@ namespace NPCPortraitMod.Helpers
                 var npcModel = npc.data.dynUnitData.modelData;
                 if (npcModel == null) return;
 
+                NpcFaceStateTracker.Reset(npcModel);
+
                 ModLogger.Info("[UI-Open]", $"Opening Customize for NPC ID: {npcId}, Sex: {npcModel.sex}");
                 ModLogger.Debug("[Face-Match]", $"Target NPC raw IDs: hat={npcModel.hat}, hair={npcModel.hair}, hairFront={npcModel.hairFront}, head={npcModel.head}, eyebrows={npcModel.eyebrows}, eyes={npcModel.eyes}, nose={npcModel.nose}, mouth={npcModel.mouth}, body={npcModel.body}, back={npcModel.back}, forehead={npcModel.forehead}, faceFull={npcModel.faceFull}, faceLeft={npcModel.faceLeft}, faceRight={npcModel.faceRight}");
 
@@ -132,16 +134,12 @@ namespace NPCPortraitMod.Helpers
                             var np = npc.data.unitData.propertyData;
                             if (pp != null && np != null)
                             {
-                                pp.age    = np.age;
-                                pp.life   = np.life;
-                                pp.beauty = np.beauty;
-                                // Note: do NOT copy pp.name = np.name (name is ID-based; Update loop handles display)
-                                if (pp.bornLuck != null && pp.bornLuck.Length >= 3)
-                                {
-                                    if (np.inTrait  != 0) { pp.inTrait  = np.inTrait;  pp.bornLuck[0].id = np.inTrait;  }
-                                    if (np.outTrait1 != 0) { pp.outTrait1 = np.outTrait1; pp.bornLuck[1].id = np.outTrait1; }
-                                    if (np.outTrait2 != 0) { pp.outTrait2 = np.outTrait2; pp.bornLuck[2].id = np.outTrait2; }
-                                }
+                                pp.age       = np.age;
+                                pp.life      = np.life;
+                                pp.beauty    = np.beauty;
+                                pp.inTrait   = np.inTrait;
+                                pp.outTrait1 = np.outTrait1;
+                                pp.outTrait2 = np.outTrait2;
                             }
                         }
                     }
@@ -162,59 +160,41 @@ namespace NPCPortraitMod.Helpers
 
                 ModLogger.Info("[Face-Match]", $"dressItemsList count={dressItemsList.Count}, manDressItems={(facade.manDressItems == null ? "NULL" : facade.manDressItems.Count.ToString())}, womanDressItems={(facade.womanDressItems == null ? "NULL" : facade.womanDressItems.Count.ToString())}");
 
-                int sliderIndex = 0;
-                foreach (var dressItems in dressItemsList)
+                var targetDressItems = (npcModel.sex == 1) ? facade.manDressItems : facade.womanDressItems;
+                if (targetDressItems != null)
                 {
-                    bool isMaleList = (facade.manDressItems != null && dressItems == facade.manDressItems);
-                    bool isFemaleList = (facade.womanDressItems != null && dressItems == facade.womanDressItems);
-
-                    foreach (var item in dressItems)
+                    foreach (var item in targetDressItems)
                     {
-                        if (item == null || item.values == null || item.values.Count == 0) 
+                        if (item == null || item.values == null || item.values.Count == 0) continue;
+
+                        var firstVal = item.values[0];
+                        if (firstVal != null && !string.IsNullOrEmpty(firstVal.type))
                         {
-                            sliderIndex++;
-                            continue;
+                            string type = firstVal.type.ToLower().Replace("_", "");
+
+                            int targetId = 0;
+                            if (type == "maozi" || type == "hat") targetId = npcModel.hat;
+                            else if (type == "toufa" || type == "hair") targetId = npcModel.hair;
+                            else if (type == "toufaqian" || type == "hairfront") targetId = npcModel.hairFront;
+                            else if (type == "lian" || type == "head") targetId = npcModel.head;
+                            else if (type == "meimao" || type == "eyebrows") targetId = npcModel.eyebrows;
+                            else if (type == "yanjing" || type == "eyes") targetId = npcModel.eyes;
+                            else if (type == "bizi" || type == "nose") targetId = npcModel.nose;
+                            else if (type == "zuiba" || type == "mouth") targetId = npcModel.mouth;
+                            else if (type == "yifu" || type == "body" || type == "dress") targetId = npcModel.body;
+                            else if (type == "houbei" || type == "back") targetId = npcModel.back;
+                            else if (type == "meixin" || type == "forehead") targetId = npcModel.forehead;
+                            else if (type == "facefull") targetId = npcModel.faceFull;
+                            else if (type == "faceleft") targetId = npcModel.faceLeft;
+                            else if (type == "faceright") targetId = npcModel.faceRight;
+
+                            MatchAndSetItem(item, targetId, type);
                         }
-                        
-                        // Only update items matching NPC sex
-                        if ((npcModel.sex == 1 && isMaleList) || (npcModel.sex == 2 && isFemaleList) || (npcModel.sex != 1 && npcModel.sex != 2))
-                        {
-                            var firstVal = item.values[0];
-                            if (firstVal != null && !string.IsNullOrEmpty(firstVal.type))
-                            {
-                                string type = firstVal.type.ToLower().Replace("_", "");
-
-                                int targetId = 0;
-                                if (type == "maozi" || type == "hat") targetId = npcModel.hat;
-                                else if (type == "toufa" || type == "hair") targetId = npcModel.hair;
-                                else if (type == "toufaqian" || type == "hairfront") targetId = npcModel.hairFront;
-                                else if (type == "lian" || type == "head") targetId = npcModel.head;
-                                else if (type == "meimao" || type == "eyebrows") targetId = npcModel.eyebrows;
-                                else if (type == "yanjing" || type == "eyes") targetId = npcModel.eyes;
-                                else if (type == "bizi" || type == "nose") targetId = npcModel.nose;
-                                else if (type == "zuiba" || type == "mouth") targetId = npcModel.mouth;
-                                else if (type == "yifu" || type == "body" || type == "dress") targetId = npcModel.body;
-                                else if (type == "houbei" || type == "back") targetId = npcModel.back;
-                                else if (type == "meixin" || type == "forehead") targetId = npcModel.forehead;
-                                else if (type == "facefull") targetId = npcModel.faceFull;
-                                else if (type == "faceleft") targetId = npcModel.faceLeft;
-                                else if (type == "faceright") targetId = npcModel.faceRight;
-                                else ModLogger.Info("[Face-Match]", $"Unknown type '{type}' at sliderIndex={sliderIndex}");
-
-                                MatchAndSetItem(item, targetId, type);
-                            }
-                        }
-
-                        sliderIndex++;
                     }
                 }
 
-                try { facade.UpdateHandleGroup(); } catch { }
-                try { facade.OnDressChanged(); } catch { }
-                try { facade.UpdateModelData(); } catch (Exception ex) { ModLogger.Warn("[Face-Match]", "UpdateModelData error: " + ex.Message); }
-                try { facade.UpdateFacadeUI(); } catch (Exception ex) { ModLogger.Warn("[Face-Match]", "UpdateFacadeUI error: " + ex.Message); }
+                try { facade.UpdateModelData(); } catch { }
 
-                // Step 3: Force write NPC IDs into portraitModel.data LAST so UpdateFacadeUI cannot overwrite
                 if (facade.portraitModel != null && facade.portraitModel.data != null)
                 {
                     var facadeData = facade.portraitModel.data;
@@ -235,6 +215,10 @@ namespace NPCPortraitMod.Helpers
 
                     facade.portraitModel.data = facadeData;
                 }
+
+                try { facade.UpdateFacadeUI(); } catch { }
+
+                NpcFaceStateTracker.FinishInit();
 
                 var finalData = (facade.portraitModel != null) ? facade.portraitModel.data : null;
                 string finalStr = finalData != null
@@ -262,13 +246,16 @@ namespace NPCPortraitMod.Helpers
                 if (text != null)
                 {
                     string txtVal = text.text.ToLower();
-                    if (npcSex == 1 && (txtVal.Contains("male") || txtVal.Contains("男")) && !txtVal.Contains("female") && !txtVal.Contains("女"))
+                    if (t != null && t.group != null)
                     {
-                        try { t.isOn = true; } catch (Exception ex) { ModLogger.Warn("[Face-Match]", "Toggle male error: " + ex.Message); }
-                    }
-                    else if (npcSex == 2 && (txtVal.Contains("female") || txtVal.Contains("女")))
-                    {
-                        try { t.isOn = true; } catch (Exception ex) { ModLogger.Warn("[Face-Match]", "Toggle female error: " + ex.Message); }
+                        if (npcSex == 1 && (txtVal.Contains("male") || txtVal.Contains("男")) && !txtVal.Contains("female") && !txtVal.Contains("女"))
+                        {
+                            try { t.isOn = true; } catch { }
+                        }
+                        else if (npcSex == 2 && (txtVal.Contains("female") || txtVal.Contains("女")))
+                        {
+                            try { t.isOn = true; } catch { }
+                        }
                     }
                 }
             }
@@ -339,5 +326,61 @@ namespace NPCPortraitMod.Helpers
         }
 
         #endregion
+    }
+
+    /// <summary>
+    /// Tracks which portrait features the user has explicitly modified during a customization session
+    /// and preserves original NPC features for unmodified parts.
+    /// </summary>
+    public static class NpcFaceStateTracker
+    {
+        public static PortraitModelData OriginalNpcModel = null;
+        public static HashSet<string> ModifiedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        public static bool IsInitializing = false;
+
+        public static void Reset(PortraitModelData npcModel)
+        {
+            IsInitializing = true;
+            OriginalNpcModel = npcModel;
+            ModifiedTypes.Clear();
+            ModLogger.Info("[FaceTracker]", "Reset tracker with NPC original model.");
+        }
+
+        public static void FinishInit()
+        {
+            IsInitializing = false;
+            ModLogger.Info("[FaceTracker]", "Initialization finished. User edits will now be tracked.");
+        }
+
+        public static void MarkModified(string itemType)
+        {
+            if (IsInitializing || string.IsNullOrEmpty(itemType)) return;
+            string t = itemType.ToLower().Replace("_", "");
+            if (!ModifiedTypes.Contains(t))
+            {
+                ModifiedTypes.Add(t);
+                ModLogger.Info("[FaceTracker]", $"User modified feature '{t}'");
+            }
+        }
+
+        public static void ApplyStateToModelData(PortraitModelData currentData)
+        {
+            if (OriginalNpcModel == null || currentData == null) return;
+
+            if (!ModifiedTypes.Contains("maozi") && !ModifiedTypes.Contains("hat")) currentData.hat = OriginalNpcModel.hat;
+            if (!ModifiedTypes.Contains("toufa") && !ModifiedTypes.Contains("hair")) currentData.hair = OriginalNpcModel.hair;
+            if (!ModifiedTypes.Contains("toufaqian") && !ModifiedTypes.Contains("hairfront")) currentData.hairFront = OriginalNpcModel.hairFront;
+            if (!ModifiedTypes.Contains("lian") && !ModifiedTypes.Contains("head")) currentData.head = OriginalNpcModel.head;
+            if (!ModifiedTypes.Contains("meimao") && !ModifiedTypes.Contains("eyebrows")) currentData.eyebrows = OriginalNpcModel.eyebrows;
+            if (!ModifiedTypes.Contains("yanjing") && !ModifiedTypes.Contains("eyes")) currentData.eyes = OriginalNpcModel.eyes;
+            if (!ModifiedTypes.Contains("bizi") && !ModifiedTypes.Contains("nose")) currentData.nose = OriginalNpcModel.nose;
+            if (!ModifiedTypes.Contains("zuiba") && !ModifiedTypes.Contains("mouth")) currentData.mouth = OriginalNpcModel.mouth;
+            if (!ModifiedTypes.Contains("yifu") && !ModifiedTypes.Contains("body") && !ModifiedTypes.Contains("dress")) currentData.body = OriginalNpcModel.body;
+            if (!ModifiedTypes.Contains("houbei") && !ModifiedTypes.Contains("back")) currentData.back = OriginalNpcModel.back;
+            if (!ModifiedTypes.Contains("meixin") && !ModifiedTypes.Contains("forehead")) currentData.forehead = OriginalNpcModel.forehead;
+            if (!ModifiedTypes.Contains("facefull")) currentData.faceFull = OriginalNpcModel.faceFull;
+            if (!ModifiedTypes.Contains("faceleft")) currentData.faceLeft = OriginalNpcModel.faceLeft;
+            if (!ModifiedTypes.Contains("faceright")) currentData.faceRight = OriginalNpcModel.faceRight;
+        }
     }
 }

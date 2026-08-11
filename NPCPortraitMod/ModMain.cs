@@ -27,6 +27,8 @@ namespace NPCPortraitMod
 
         public override void OnUpdate()
         {
+            if (!string.IsNullOrEmpty(EditingNpcId)) return;
+
             if (UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.F9))
             {
                 HandleF9Shortcut();
@@ -49,6 +51,7 @@ namespace NPCPortraitMod
                         string playerId = player.data.unitData.unitID;
                         ModLogger.Info("[UI-Open]", $"F9 pressed: Opening Customize for Player (ID: {playerId})");
                         EditingNpcId = playerId;
+                        Patches.Patch_UICreatePlayer_Property.Patch_UICreatePlayer_Update.LastInitializedNpcId = null;
 
                         var ui = g.ui.OpenUI<UICreatePlayer>(UIType.CreatePlayer);
                         if (ui != null)

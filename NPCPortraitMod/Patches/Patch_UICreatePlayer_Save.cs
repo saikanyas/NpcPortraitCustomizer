@@ -59,10 +59,110 @@ namespace NPCPortraitMod.Patches
                             targetModel.faceLeft = newModel.faceLeft;
                             targetModel.faceRight = newModel.faceRight;
 
-                            if (__instance.playerData != null && __instance.playerData.unitData != null && __instance.playerData.unitData.propertyData != null)
+                            try
                             {
-                                var newName = __instance.playerData.unitData.propertyData.name;
-                                npc.data.unitData.propertyData.name = newName;
+                                var tmpInputs = __instance.GetComponentsInChildren<TMPro.TMP_InputField>(true);
+                                if (tmpInputs != null && tmpInputs.Length > 0 && npc.data != null && npc.data.unitData != null && npc.data.unitData.propertyData != null)
+                                {
+                                    string saveSurname = null;
+                                    string saveGivenName = null;
+
+                                    foreach (var input in tmpInputs)
+                                    {
+                                        if (input == null) continue;
+                                        string objName = input.gameObject.name.ToLower();
+                                        if (objName.Contains("family") || objName.Contains("sur"))
+                                            saveSurname = input.text;
+                                        else if (objName.EndsWith("_en") || objName.Contains("given") || objName.Contains("first"))
+                                            saveGivenName = input.text;
+                                    }
+
+                                    var oldName = npc.data.unitData.propertyData.name;
+                                    string oldSurname = (oldName != null && oldName.Length > 0) ? oldName[0] : "";
+                                    string oldGivenName = (oldName != null && oldName.Length > 1) ? oldName[1] : "";
+
+                                    string finalSurname = !string.IsNullOrEmpty(saveSurname) ? saveSurname : oldSurname;
+                                    string finalGiven = !string.IsNullOrEmpty(saveGivenName) ? saveGivenName.Trim() : oldGivenName.Trim();
+
+                                    // Tale of Immortals format requirement: Given name (name[1]) MUST have a leading space (" " + givenName)!
+                                    npc.data.unitData.propertyData.name = new string[2] { finalSurname, " " + finalGiven };
+                                    ModLogger.Info("[Save]", $"Updated NPC name: Surname='{finalSurname}', GivenName=' {finalGiven}'");
+                                }
+                            }
+                            catch (Exception nameEx)
+                            {
+                                ModLogger.Warn("[Save]", "Error saving modified name: " + nameEx.Message);
+                            }
+
+                            try
+                            {
+                                var targetProp = npc.data.unitData.propertyData;
+                                if (targetProp != null)
+                                {
+                                    int newInTrait = 0;
+                                    int newOut1 = 0;
+                                    int newOut2 = 0;
+
+                                    if (__instance.playerData != null && __instance.playerData.unitData != null && __instance.playerData.unitData.propertyData != null)
+                                    {
+                                        var pData = __instance.playerData.unitData.propertyData;
+                                        newInTrait = pData.inTrait;
+                                        newOut1 = pData.outTrait1;
+                                        newOut2 = pData.outTrait2;
+                                    }
+
+                                    var toggles = __instance.GetComponentsInChildren<UnityEngine.UI.Toggle>(true);
+                                    if (toggles != null && toggles.Length > 0)
+                                    {
+                                        var selectedOutTraits = new System.Collections.Generic.List<int>();
+                                        foreach (var tgl in toggles)
+                                        {
+                                            if (tgl == null || !tgl.isOn) continue;
+                                            var textObj = tgl.GetComponentInChildren<UnityEngine.UI.Text>(true);
+                                            var tmpTextObj = tgl.GetComponentInChildren<TMPro.TMP_Text>(true);
+                                            string label = textObj != null ? textObj.text : (tmpTextObj != null ? tmpTextObj.text : "");
+                                            if (string.IsNullOrEmpty(label)) continue;
+                                            label = label.Trim();
+
+                                            foreach (var kvp in Patch_UICreatePlayer_Property.TraitNameMap)
+                                            {
+                                                int traitId = kvp.Key;
+                                                bool matched = false;
+                                                foreach (var name in kvp.Value)
+                                                {
+                                                    if (string.Equals(label, name, StringComparison.OrdinalIgnoreCase))
+                                                    {
+                                                        if (traitId >= 1 && traitId <= 7)
+                                                        {
+                                                            newInTrait = traitId;
+                                                        }
+                                                        else if (traitId >= 8 && traitId <= 19)
+                                                        {
+                                                            if (!selectedOutTraits.Contains(traitId))
+                                                                selectedOutTraits.Add(traitId);
+                                                        }
+                                                        matched = true;
+                                                        break;
+                                                    }
+                                                }
+                                                if (matched) break;
+                                            }
+                                        }
+
+                                        if (selectedOutTraits.Count > 0) newOut1 = selectedOutTraits[0];
+                                        if (selectedOutTraits.Count > 1) newOut2 = selectedOutTraits[1];
+                                    }
+
+                                    if (newInTrait != 0) targetProp.inTrait = newInTrait;
+                                    if (newOut1 != 0) targetProp.outTrait1 = newOut1;
+                                    if (newOut2 != 0) targetProp.outTrait2 = newOut2;
+
+                                    ModLogger.Info("[Save]", $"Updated NPC traits: inTrait={targetProp.inTrait}, outTrait1={targetProp.outTrait1}, outTrait2={targetProp.outTrait2}");
+                                }
+                            }
+                            catch (Exception traitEx)
+                            {
+                                ModLogger.Warn("[Save]", "Error saving modified traits: " + traitEx.Message);
                             }
 
                             if (npc.data.unitData != null)

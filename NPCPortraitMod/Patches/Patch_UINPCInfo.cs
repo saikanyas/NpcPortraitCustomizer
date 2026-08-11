@@ -138,6 +138,7 @@ namespace NPCPortraitMod.Patches
                 btn.onClick.AddListener(new Action(() =>
                 {
                     ModMain.EditingNpcId = unitId;
+                    Patch_UICreatePlayer_Property.Patch_UICreatePlayer_Update.LastInitializedNpcId = null;
 
                     // Close NPC info window
                     g.ui.CloseUI(UIType.NPCInfo);

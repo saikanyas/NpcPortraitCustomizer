@@ -36,11 +36,17 @@
     <Reference Include="UnityEngine.InputLegacyModule">
       <HintPath>libs\UnityEngine.InputLegacyModule.dll</HintPath>
     </Reference>
+    <Reference Include="Unity.TextMeshPro">
+      <HintPath>libs\Unity.TextMeshPro.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
   <!-- Auto-copy to Mods folder only if the target directory exists on the building machine -->
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="Exists('$(GamePath)\Mods')">
-    <Copy SourceFiles="$(TargetDir)$(TargetName).dll" DestinationFolder="$(GamePath)\Mods" />
+  <Target Name="CopyModToGame" AfterTargets="Build">
+  <Copy
+    SourceFiles="$(TargetPath)"
+    DestinationFolder="C:\Program Files (x86)\Steam\steamapps\common\鬼谷八荒\Mods"
+    SkipUnchangedFiles="true" />
   </Target>
 
 </Project>

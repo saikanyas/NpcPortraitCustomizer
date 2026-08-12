@@ -2,7 +2,7 @@ using HarmonyLib;
 using UnityEngine;
 using System;
 
-namespace NPCPortraitMod.Patches
+namespace NPCPortraitCustomizer.Patches
 {
     /// <summary>
     /// Harmony patches to suppress game shortcuts and hotkeys while the Customize UI is open.

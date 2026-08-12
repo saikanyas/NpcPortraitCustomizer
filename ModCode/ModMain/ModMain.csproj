@@ -3,50 +3,76 @@
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
     <LangVersion>latest</LangVersion>
-    <AssemblyName>NPCPortraitMod</AssemblyName>
-    <RootNamespace>NPCPortraitMod</RootNamespace>
+    <AssemblyName>NPCPortraitCustomizer</AssemblyName>
+    <RootNamespace>NPCPortraitCustomizer</RootNamespace>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <!-- Default GamePath if not specified in environment or build args -->
     <GamePath Condition="'$(GamePath)' == ''">C:\Program Files (x86)\Steam\steamapps\common\鬼谷八荒</GamePath>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- ตำแหน่งอ้างอิงไฟล์ DLL ของเกมและ MelonLoader -->
-    <!-- ให้คุณนำไฟล์ DLL เหล่านี้มาใส่ในโฟลเดอร์ libs ที่อยู่ในโฟลเดอร์เดียวกับโปรเจกต์นี้ -->
+    <!-- Reference DLLs from game/MelonLoader with Private=false (Do not copy local when exporting) -->
     <Reference Include="MelonLoader">
       <HintPath>libs\MelonLoader.dll</HintPath>
+      <Private>false</Private>
+      <CopyLocal>false</CopyLocal>
     </Reference>
     <Reference Include="0Harmony">
       <HintPath>libs\0Harmony.dll</HintPath>
+      <Private>false</Private>
+      <CopyLocal>false</CopyLocal>
     </Reference>
     <Reference Include="UnhollowerBaseLib">
       <HintPath>libs\UnhollowerBaseLib.dll</HintPath>
+      <Private>false</Private>
+      <CopyLocal>false</CopyLocal>
     </Reference>
     <Reference Include="Il2Cppmscorlib">
       <HintPath>libs\Il2Cppmscorlib.dll</HintPath>
+      <Private>false</Private>
+      <CopyLocal>false</CopyLocal>
     </Reference>
     <Reference Include="Assembly-CSharp">
       <HintPath>libs\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+      <CopyLocal>false</CopyLocal>
     </Reference>
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>libs\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+      <CopyLocal>false</CopyLocal>
     </Reference>
     <Reference Include="UnityEngine.UI">
       <HintPath>libs\UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+      <CopyLocal>false</CopyLocal>
     </Reference>
     <Reference Include="UnityEngine.InputLegacyModule">
       <HintPath>libs\UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>false</Private>
+      <CopyLocal>false</CopyLocal>
     </Reference>
     <Reference Include="Unity.TextMeshPro">
       <HintPath>libs\Unity.TextMeshPro.dll</HintPath>
+      <Private>false</Private>
+      <CopyLocal>false</CopyLocal>
     </Reference>
   </ItemGroup>
 
+  <!-- Auto-remove non-mod DLLs so game export never contains duplicate Lib DLLs -->
+  <Target Name="CleanLibAssemblies" AfterTargets="Build">
+    <ItemGroup>
+      <ExtraDlls Include="$(TargetDir)*.dll" Exclude="$(TargetDir)$(TargetName).dll" />
+    </ItemGroup>
+    <Delete Files="@(ExtraDlls)" />
+  </Target>
+
   <!-- Auto-copy to Mods folder only if the target directory exists on the building machine -->
-  <Target Name="CopyModToGame" AfterTargets="Build">
-  <Copy
-    SourceFiles="$(TargetPath)"
-    DestinationFolder="C:\Program Files (x86)\Steam\steamapps\common\鬼谷八荒\Mods"
-    SkipUnchangedFiles="true" />
+  <Target Name="CopyModToGame" AfterTargets="Build" DependsOnTargets="CleanLibAssemblies">
+    <Copy
+      SourceFiles="$(TargetPath)"
+      DestinationFolder="C:\Program Files (x86)\Steam\steamapps\common\鬼谷八荒\Mods"
+      SkipUnchangedFiles="true" />
   </Target>
 
 </Project>

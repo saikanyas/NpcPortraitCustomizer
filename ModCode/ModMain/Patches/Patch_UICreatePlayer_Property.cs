@@ -4,7 +4,7 @@ using TMPro;
 using System;
 using System.Collections.Generic;
 
-namespace NPCPortraitMod.Patches
+namespace NPCPortraitCustomizer.Patches
 {
     /// <summary>
     /// Harmony patches for UICreatePlayer property UI, traits locking, and name input field sync.
@@ -177,41 +177,35 @@ namespace NPCPortraitMod.Patches
                     return;
                 }
 
-                // Only initialize input fields and trait toggles once per NPC customization session
-                if (LastInitializedNpcId == ModMain.EditingNpcId) return;
-
                 var npc = g.world.unit.GetUnit(ModMain.EditingNpcId);
                 if (npc == null || npc.data == null || npc.data.unitData == null) return;
+
+                // Sync Race/Realm EVERY frame — game overwrites these fields in its own Update
+                var facade = __instance.facade?.TryCast<UICreatePlayerFacade>();
+                Helpers.UICreatePlayerHelper.SyncRaceAndRealmToUI(facade, npc);
+
+                // Heavy init (name fields, trait toggles) — once per session only
+                if (LastInitializedNpcId == ModMain.EditingNpcId) return;
 
                 try
                 {
                     var prop = npc.data.unitData.propertyData;
                     if (prop == null) return;
 
-                    string surname = "";
-                    string givenName = "";
-                    string fullName = "";
-
+                    string surname = "", givenName = "", fullName = "";
                     try { fullName = prop.GetName(); } catch { }
 
                     if (prop.name != null && prop.name.Length >= 2)
                     {
-                        surname = prop.name[0] ?? "";
+                        surname   = prop.name[0] ?? "";
                         givenName = (prop.name[1] ?? "").Trim();
                     }
 
                     if (string.IsNullOrEmpty(surname) && string.IsNullOrEmpty(givenName) && !string.IsNullOrEmpty(fullName))
                     {
                         var parts = fullName.Trim().Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                        if (parts.Length >= 2)
-                        {
-                            surname = parts[0];
-                            givenName = string.Join(" ", parts, 1, parts.Length - 1);
-                        }
-                        else
-                        {
-                            givenName = fullName;
-                        }
+                        if (parts.Length >= 2) { surname = parts[0]; givenName = string.Join(" ", parts, 1, parts.Length - 1); }
+                        else givenName = fullName;
                     }
 
                     var tmpInputs = __instance.GetComponentsInChildren<TMP_InputField>(true);
@@ -224,27 +218,18 @@ namespace NPCPortraitMod.Patches
                             if (input == null) continue;
                             string objName = input.gameObject.name.ToLower();
                             ModLogger.Info("[Name]", $"  Setting TMP GO='{input.gameObject.name}'");
-
                             try { input.interactable = true; } catch { }
 
                             if (objName.Contains("family") || objName.Contains("sur"))
-                            {
                                 input.text = surname;
-                            }
                             else if (objName.EndsWith("_en") || objName.Contains("given") || objName.Contains("first"))
-                            {
                                 input.text = givenName;
-                            }
                             else
-                            {
                                 input.text = fullName;
-                            }
                         }
                     }
 
-                    // Sync trait toggles ONCE on UI initialization
                     SyncTraitToggles(__instance, prop);
-
                     LastInitializedNpcId = ModMain.EditingNpcId;
                 }
                 catch (Exception ex)

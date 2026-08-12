@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
-namespace NPCPortraitMod.Helpers
+namespace NPCPortraitCustomizer.Helpers
 {
     /// <summary>
     /// Helper functions for character customization UI matching and manipulation.
@@ -123,6 +124,7 @@ namespace NPCPortraitMod.Helpers
                 if (ui != null)
                 {
                     SetupCustomizeUIButtonsAndToggles(ui, npcModel.sex);
+                    SyncRaceAndRealmToUI(facade, npc);
 
                     // Seed NPC property data into playerData immediately so name/traits start correct
                     try
@@ -302,9 +304,9 @@ namespace NPCPortraitMod.Helpers
                     exitTxt.color = Color.red;
                 }
 
-                // Position exit button to the left of Save button
+                // Position exit button to the left of Save button with clean spacing
                 Vector3 savePos = saveBtn.transform.localPosition;
-                exitObj.transform.localPosition = new Vector3(savePos.x - 160f, savePos.y, savePos.z);
+                exitObj.transform.localPosition = new Vector3(savePos.x - 220f, savePos.y, savePos.z);
                 exitObj.transform.localScale = saveBtn.transform.localScale;
 
                 exitBtn.onClick.RemoveAllListeners();
@@ -323,6 +325,72 @@ namespace NPCPortraitMod.Helpers
                     }
                 }));
             }
+        }
+
+        public static void SyncRaceAndRealmToUI(UICreatePlayerFacade facade, WorldUnitBase unit)
+        {
+            try
+            {
+                string raceStr  = Patches.Patch_UINPCInfo.CurrentNpcRaceText;
+                string realmStr = Patches.Patch_UINPCInfo.CurrentNpcRealmText;
+
+                // Both already resolved — just apply
+                if (string.IsNullOrEmpty(raceStr) || string.IsNullOrEmpty(realmStr))
+                {
+                    var prop = unit?.data?.unitData?.propertyData;
+                    if (prop != null)
+                    {
+                        if (string.IsNullOrEmpty(raceStr))
+                        {
+                            try
+                            {
+                                // Uses cached FieldInfo from Patch_UINPCInfo
+                                var field = Patches.Patch_UINPCInfo.GetRoleRaceField(prop);
+                                if (field != null)
+                                {
+                                    int raceID = Convert.ToInt32(field.GetValue(prop));
+                                    if (raceID > 0 && g.conf?.roleRace != null)
+                                    {
+                                        var raceItem = g.conf.roleRace.GetItem(raceID);
+                                        if (raceItem != null && !string.IsNullOrEmpty(raceItem.race))
+                                            raceStr = GameTool.LS(raceItem.race);
+                                    }
+                                }
+                            }
+                            catch { }
+                        }
+
+                        if (string.IsNullOrEmpty(realmStr))
+                        {
+                            try
+                            {
+                                var gradeItem = g.conf?.roleGrade?.GetItem(prop.gradeID);
+                                if (gradeItem != null)
+                                {
+                                    string gn = (GameTool.LS(gradeItem.gradeName) ?? "").Trim();
+                                    string pn = (GameTool.LS(gradeItem.phaseName) ?? "").Trim();
+                                    realmStr = string.IsNullOrEmpty(pn) ? gn : gn + " " + pn;
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                }
+
+                if (facade == null) return;
+
+                if (!string.IsNullOrEmpty(raceStr))
+                {
+                    try { if (facade.textRaceValue  != null && facade.textRaceValue.text  != raceStr) facade.textRaceValue.text  = raceStr; } catch { }
+                    try { if (facade.textRaceValue_En != null && facade.textRaceValue_En.text != raceStr) facade.textRaceValue_En.text = raceStr; } catch { }
+                }
+                if (!string.IsNullOrEmpty(realmStr))
+                {
+                    try { if (facade.textLevelValue   != null && facade.textLevelValue.text   != realmStr) facade.textLevelValue.text   = realmStr; } catch { }
+                    try { if (facade.textLevelValue_En != null && facade.textLevelValue_En.text != realmStr) facade.textLevelValue_En.text = realmStr; } catch { }
+                }
+            }
+            catch { }
         }
 
         #endregion

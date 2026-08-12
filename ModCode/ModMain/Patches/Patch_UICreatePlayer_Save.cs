@@ -2,7 +2,7 @@ using HarmonyLib;
 using UnityEngine;
 using System;
 
-namespace NPCPortraitMod.Patches
+namespace NPCPortraitCustomizer.Patches
 {
     /// <summary>
     /// Harmony patches for UICreatePlayer DestroyUI finalizer exception suppression and OnOkClick save logic.

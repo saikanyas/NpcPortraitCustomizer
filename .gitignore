@@ -1,8 +1,26 @@
-GuiLib/*
-TaleOfImmortalGameCode/*
-MPE(ExampleModOnly)/*
+# Build outputs & intermediate files
+bin/
+obj/
+*.pdb
+*.cache
 
-NPCPortraitMod/bin/*
-NPCPortraitMod/obj/*
+# IDE & User specific settings
+.vs/
+.vscode/
+*.user
+*.userprefs
+*.suo
 
+# External game code & example projects
+GuiLib/
+TaleOfImmortalGameCode/
+MPE(ExampleModOnly)/
+
+# Heavy Game Reference DLLs (large binaries)
+libs/*.dll
+
+# Output & Log files
+SteamWorkShopVer/
+*.log
 AGENT.md
+MOD_STATUS.md

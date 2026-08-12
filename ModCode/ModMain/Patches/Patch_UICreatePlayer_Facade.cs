@@ -1,9 +1,9 @@
 using HarmonyLib;
 using UnityEngine;
 using System;
-using NPCPortraitMod.Helpers;
+using NPCPortraitCustomizer.Helpers;
 
-namespace NPCPortraitMod.Patches
+namespace NPCPortraitCustomizer.Patches
 {
     /// <summary>
     /// Harmony patches for UICreatePlayerFacade randomization suppression and NPC face injection.

@@ -1,59 +1,59 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
     <LangVersion>latest</LangVersion>
-    <AssemblyName>NPCPortraitCustomizer</AssemblyName>
-    <RootNamespace>NPCPortraitCustomizer</RootNamespace>
+    <AssemblyName>NPCCustomizer</AssemblyName>
+    <RootNamespace>NPCCustomizer</RootNamespace>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <!-- Default GamePath if not specified in environment or build args -->
     <GamePath Condition="'$(GamePath)' == ''">C:\Program Files (x86)\Steam\steamapps\common\鬼谷八荒</GamePath>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Reference DLLs from game/MelonLoader with Private=false (Do not copy local when exporting) -->
+    <!-- Reference DLLs directly from local GamePath/MelonLoader with Private=false -->
     <Reference Include="MelonLoader">
-      <HintPath>libs\MelonLoader.dll</HintPath>
+      <HintPath>$(GamePath)\MelonLoader\MelonLoader.dll</HintPath>
       <Private>false</Private>
       <CopyLocal>false</CopyLocal>
     </Reference>
     <Reference Include="0Harmony">
-      <HintPath>libs\0Harmony.dll</HintPath>
+      <HintPath>$(GamePath)\MelonLoader\0Harmony.dll</HintPath>
       <Private>false</Private>
       <CopyLocal>false</CopyLocal>
     </Reference>
     <Reference Include="UnhollowerBaseLib">
-      <HintPath>libs\UnhollowerBaseLib.dll</HintPath>
+      <HintPath>$(GamePath)\MelonLoader\Managed\UnhollowerBaseLib.dll</HintPath>
       <Private>false</Private>
       <CopyLocal>false</CopyLocal>
     </Reference>
     <Reference Include="Il2Cppmscorlib">
-      <HintPath>libs\Il2Cppmscorlib.dll</HintPath>
+      <HintPath>$(GamePath)\MelonLoader\Managed\Il2Cppmscorlib.dll</HintPath>
       <Private>false</Private>
       <CopyLocal>false</CopyLocal>
     </Reference>
     <Reference Include="Assembly-CSharp">
-      <HintPath>libs\Assembly-CSharp.dll</HintPath>
+      <HintPath>$(GamePath)\MelonLoader\Managed\Assembly-CSharp.dll</HintPath>
       <Private>false</Private>
       <CopyLocal>false</CopyLocal>
     </Reference>
     <Reference Include="UnityEngine.CoreModule">
-      <HintPath>libs\UnityEngine.CoreModule.dll</HintPath>
+      <HintPath>$(GamePath)\MelonLoader\Managed\UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
       <CopyLocal>false</CopyLocal>
     </Reference>
     <Reference Include="UnityEngine.UI">
-      <HintPath>libs\UnityEngine.UI.dll</HintPath>
+      <HintPath>$(GamePath)\MelonLoader\Managed\UnityEngine.UI.dll</HintPath>
       <Private>false</Private>
       <CopyLocal>false</CopyLocal>
     </Reference>
     <Reference Include="UnityEngine.InputLegacyModule">
-      <HintPath>libs\UnityEngine.InputLegacyModule.dll</HintPath>
+      <HintPath>$(GamePath)\MelonLoader\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
       <Private>false</Private>
       <CopyLocal>false</CopyLocal>
     </Reference>
     <Reference Include="Unity.TextMeshPro">
-      <HintPath>libs\Unity.TextMeshPro.dll</HintPath>
+      <HintPath>$(GamePath)\MelonLoader\Managed\Unity.TextMeshPro.dll</HintPath>
       <Private>false</Private>
       <CopyLocal>false</CopyLocal>
     </Reference>

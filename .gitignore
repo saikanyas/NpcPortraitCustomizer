@@ -15,6 +15,11 @@ obj/
 GuiLib/
 TaleOfImmortalGameCode/
 MPE(ExampleModOnly)/
+GGBH_API.chm
+scratch/
+DestinySelector/
+ChineseNpcCustomizeVersion/
+ModFiles/
 
 # Heavy Game Reference DLLs (large binaries)
 libs/*.dll

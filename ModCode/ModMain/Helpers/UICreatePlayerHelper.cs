@@ -1,15 +1,36 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace NPCPortraitCustomizer.Helpers
+namespace NPCCustomizer.Helpers
 {
     /// <summary>
     /// Helper functions for character customization UI matching and manipulation.
     /// </summary>
     public static class UICreatePlayerHelper
     {
+        /// <summary>
+        /// Retrieves a WorldUnitBase by ID, safely checking both g.world.unit and g.world.playerUnit.
+        /// </summary>
+        public static WorldUnitBase GetUnitById(string unitId)
+        {
+            if (string.IsNullOrEmpty(unitId)) return null;
+            try
+            {
+                var unit = g.world?.unit?.GetUnit(unitId);
+                if (unit == null && g.world?.playerUnit?.data?.unitData?.unitID == unitId)
+                {
+                    unit = g.world.playerUnit;
+                }
+                return unit;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         #region Facade Item Matching
 
         public static bool MatchAndSetItem(UICreatePlayerFacade.FacadeItemData item, int targetDressId, string categoryName)
@@ -109,7 +130,7 @@ namespace NPCPortraitCustomizer.Helpers
             try
             {
                 string npcId = ModMain.EditingNpcId;
-                var npc = g.world.unit.GetUnit(npcId);
+                var npc = GetUnitById(npcId);
                 if (npc == null || npc.data == null || npc.data.dynUnitData == null) return;
 
                 var npcModel = npc.data.dynUnitData.modelData;
@@ -236,13 +257,13 @@ namespace NPCPortraitCustomizer.Helpers
 
         public static void SetupCustomizeUIButtonsAndToggles(UICreatePlayer ui, int npcSex)
         {
-            // Hide Stats tab toggles & match sex toggle to NPC
+            // Ensure Stats & Destiny tab toggle is active
             foreach (var t in ui.GetComponentsInChildren<UnityEngine.UI.Toggle>(true))
             {
                 var text = t.GetComponentInChildren<UnityEngine.UI.Text>();
                 if (text != null && (text.text.ToLower().Contains("stat") || text.text.Contains("属性")))
                 {
-                    t.gameObject.SetActive(false);
+                    t.gameObject.SetActive(true);
                 }
 
                 if (text != null)
@@ -314,6 +335,7 @@ namespace NPCPortraitCustomizer.Helpers
                 {
                     ModLogger.Debug("[UI-Open]", "Exit button clicked.");
                     ModMain.EditingNpcId = null;
+                    Patches.Patch_UICreatePlayer_Property.Patch_UICreatePlayerProperty_UpdatePropertyUI.ResetDestinySeedState();
                     try
                     {
                         if (g.ui != null) g.ui.CloseUI(UIType.CreatePlayer, true);

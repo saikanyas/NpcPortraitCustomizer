@@ -1,10 +1,10 @@
-using HarmonyLib;
+﻿using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
 using System;
 using System.Reflection;
 
-namespace NPCPortraitCustomizer.Patches
+namespace NPCCustomizer.Patches
 {
     /// <summary>
     /// Harmony patch for UINPCInfo to inject the "Customize" button into NPC profile UI

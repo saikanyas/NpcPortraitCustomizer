@@ -1,11 +1,11 @@
-using System;
+﻿using System;
 using System.Reflection;
 using UnityEngine;
 
-namespace NPCPortraitCustomizer
+namespace NPCCustomizer
 {
     /// <summary>
-    /// Main entry class for NPC Portrait Customizer mod matching official Tale of Immortals Mod API.
+    /// Main entry class for NPC Customizer mod matching official Tale of Immortals Mod API.
     /// </summary>
     public class ModMain
     {
@@ -28,6 +28,14 @@ namespace NPCPortraitCustomizer
         {
             try
             {
+                try
+                {
+                    MelonLoader.MelonLogger.Msg("================================================================");
+                    MelonLoader.MelonLogger.Msg("[NPCCustomizer] NPC Customizer Mod Loaded! (Press F9 for Player)");
+                    MelonLoader.MelonLogger.Msg("================================================================");
+                }
+                catch { }
+
                 ModLogger.LoadConfig();
 
                 if (harmony != null)
@@ -36,16 +44,16 @@ namespace NPCPortraitCustomizer
                     harmony = null;
                 }
 
-                harmony = new HarmonyLib.Harmony("NPCPortraitCustomizer");
+                harmony = new HarmonyLib.Harmony("NPCCustomizer");
                 harmony.PatchAll(Assembly.GetExecutingAssembly());
 
                 corUpdate = g.timer.Frame(new Action(OnUpdate), 1, true);
 
-                ModLogger.Info("[Init]", "NPC Portrait Customizer Mod Initialized! Press F9 in-game to customize Player portrait.");
+                ModLogger.Info("[Init]", "NPC Customizer Mod Initialized! Press F9 in-game to customize Player portrait.");
             }
             catch (Exception ex)
             {
-                ModLogger.Error("[Init]", "Error initializing NPCPortraitCustomizer", ex);
+                ModLogger.Error("[Init]", "Error initializing NPCCustomizer", ex);
             }
         }
 
@@ -68,7 +76,7 @@ namespace NPCPortraitCustomizer
                     harmony = null;
                 }
 
-                ModLogger.Info("[Destroy]", "NPC Portrait Customizer Mod Destroyed.");
+                ModLogger.Info("[Destroy]", "NPC Customizer Mod Destroyed.");
             }
             catch (Exception ex)
             {
@@ -81,7 +89,16 @@ namespace NPCPortraitCustomizer
         /// </summary>
         private void OnUpdate()
         {
-            if (!string.IsNullOrEmpty(EditingNpcId)) return;
+            // Auto-clean EditingNpcId if the UI is no longer open in game
+            if (!string.IsNullOrEmpty(EditingNpcId))
+            {
+                var curUI = g.ui != null ? g.ui.GetUI<UICreatePlayer>(UIType.CreatePlayer) : null;
+                if (curUI == null || !curUI.gameObject.activeInHierarchy)
+                {
+                    EditingNpcId = null;
+                    Patches.Patch_UICreatePlayer_Property.Patch_UICreatePlayerProperty_UpdatePropertyUI.ResetDestinySeedState();
+                }
+            }
 
             if (UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.F9))
             {
@@ -106,6 +123,7 @@ namespace NPCPortraitCustomizer
                         ModLogger.Info("[UI-Open]", $"F9 pressed: Opening Customize for Player (ID: {playerId})");
                         EditingNpcId = playerId;
                         Patches.Patch_UICreatePlayer_Property.Patch_UICreatePlayer_Update.LastInitializedNpcId = null;
+                        Patches.Patch_UICreatePlayer_Property.Patch_UICreatePlayerProperty_UpdatePropertyUI.ResetDestinySeedState();
 
                         var ui = g.ui.OpenUI<UICreatePlayer>(UIType.CreatePlayer);
                         if (ui != null)

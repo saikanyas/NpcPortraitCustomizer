@@ -1,12 +1,12 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
 
-namespace NPCPortraitCustomizer
+namespace NPCCustomizer
 {
     /// <summary>
-    /// Centralized logging utility for NPCPortraitCustomizer using UnityEngine.Debug.
+    /// Centralized logging utility for NPCCustomizer using UnityEngine.Debug.
     /// Configured via ModAssets/config.json (default EnableDebugLog: false).
     /// </summary>
     public static class ModLogger
@@ -16,7 +16,7 @@ namespace NPCPortraitCustomizer
         // Controls verbose debug logging output (default: false)
         public static bool EnableDebug = false;
         
-        private const string GlobalPrefix = "[NPCPortraitCustomizer]";
+        private const string GlobalPrefix = "[NPCCustomizer]";
 
         #endregion
 
@@ -89,30 +89,33 @@ namespace NPCPortraitCustomizer
         {
             if (EnableDebug)
             {
-                UnityEngine.Debug.Log($"{GlobalPrefix}{subsystem} [DEBUG] {message}");
+                string msg = $"{GlobalPrefix}{subsystem} [DEBUG] {message}";
+                UnityEngine.Debug.Log(msg);
+                try { MelonLoader.MelonLogger.Msg(msg); } catch { }
             }
         }
 
         public static void Info(string subsystem, string message)
         {
-            UnityEngine.Debug.Log($"{GlobalPrefix}{subsystem} {message}");
+            string msg = $"{GlobalPrefix}{subsystem} {message}";
+            UnityEngine.Debug.Log(msg);
+            try { MelonLoader.MelonLogger.Msg(msg); } catch { }
         }
 
         public static void Warn(string subsystem, string message)
         {
-            UnityEngine.Debug.LogWarning($"{GlobalPrefix}{subsystem} {message}");
+            string msg = $"{GlobalPrefix}{subsystem} {message}";
+            UnityEngine.Debug.LogWarning(msg);
+            try { MelonLoader.MelonLogger.Warning(msg); } catch { }
         }
 
         public static void Error(string subsystem, string message, Exception ex = null)
         {
-            if (ex != null)
-            {
-                UnityEngine.Debug.LogError($"{GlobalPrefix}{subsystem} {message}\nException: {ex.Message}\nStackTrace: {ex.StackTrace}");
-            }
-            else
-            {
-                UnityEngine.Debug.LogError($"{GlobalPrefix}{subsystem} {message}");
-            }
+            string msg = ex != null 
+                ? $"{GlobalPrefix}{subsystem} {message}\nException: {ex.Message}\nStackTrace: {ex.StackTrace}"
+                : $"{GlobalPrefix}{subsystem} {message}";
+            UnityEngine.Debug.LogError(msg);
+            try { MelonLoader.MelonLogger.Error(msg); } catch { }
         }
 
         #endregion

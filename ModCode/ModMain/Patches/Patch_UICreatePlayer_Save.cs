@@ -1,8 +1,11 @@
-using HarmonyLib;
+﻿using HarmonyLib;
 using UnityEngine;
 using System;
+using System.Collections.Generic;
+using UnhollowerBaseLib;
+using NPCCustomizer.Helpers;
 
-namespace NPCPortraitCustomizer.Patches
+namespace NPCCustomizer.Patches
 {
     /// <summary>
     /// Harmony patches for UICreatePlayer DestroyUI finalizer exception suppression and OnOkClick save logic.
@@ -16,6 +19,11 @@ namespace NPCPortraitCustomizer.Patches
             public static Exception Finalizer(Exception __exception)
             {
                 return null;
+            }
+
+            public static void Postfix()
+            {
+                Patch_UICreatePlayer_Property.Patch_UICreatePlayerProperty_UpdatePropertyUI.ResetDestinySeedState();
             }
         }
 
@@ -37,37 +45,41 @@ namespace NPCPortraitCustomizer.Patches
                     {
                         ModLogger.Info("[Save]", "Saving new face to NPC: " + npcId);
 
-                        var npc = g.world.unit.GetUnit(npcId);
+                        var npc = UICreatePlayerHelper.GetUnitById(npcId);
                         
                         if (npc != null && npc.data != null && npc.data.dynUnitData != null && npc.data.dynUnitData.modelData != null && __instance.uiFacade != null && __instance.uiFacade.portraitModel != null && __instance.uiFacade.portraitModel.data != null)
                         {
                             var newModel = __instance.uiFacade.portraitModel.data;
-                            var targetModel = npc.data.dynUnitData.modelData;
 
-                            if (newModel.sex != 0)
+                            if (newModel.sex != 0 && npc.data != null && npc.data.unitData != null && npc.data.unitData.propertyData != null)
                             {
-                                targetModel.sex = newModel.sex;
-                                if (npc.data != null && npc.data.unitData != null && npc.data.unitData.propertyData != null)
-                                {
-                                    npc.data.unitData.propertyData.sex = (UnitSexType)newModel.sex;
-                                    ModLogger.Info("[Save]", $"Updated NPC sex: {newModel.sex}");
-                                }
+                                npc.data.unitData.propertyData.sex = (UnitSexType)newModel.sex;
+                                ModLogger.Info("[Save]", $"Updated NPC sex: {newModel.sex}");
                             }
 
-                            targetModel.hat = newModel.hat;
-                            targetModel.hair = newModel.hair;
-                            targetModel.hairFront = newModel.hairFront;
-                            targetModel.head = newModel.head;
-                            targetModel.eyebrows = newModel.eyebrows;
-                            targetModel.eyes = newModel.eyes;
-                            targetModel.nose = newModel.nose;
-                            targetModel.mouth = newModel.mouth;
-                            targetModel.body = newModel.body;
-                            targetModel.back = newModel.back;
-                            targetModel.forehead = newModel.forehead;
-                            targetModel.faceFull = newModel.faceFull;
-                            targetModel.faceLeft = newModel.faceLeft;
-                            targetModel.faceRight = newModel.faceRight;
+                            // Use official game SetModelData API (updates both 2D portrait model and 3D Spine combat/map model)
+                            try
+                            {
+                                BattleModelHumanData battleModelHumanData = null;
+                                if (npc.data.unitData?.propertyData?.battleModelData != null)
+                                {
+                                    battleModelHumanData = npc.data.unitData.propertyData.battleModelData.Clone();
+                                }
+                                else
+                                {
+                                    battleModelHumanData = new BattleModelHumanData();
+                                }
+                                battleModelHumanData.body = newModel.body;
+                                npc.data.SetModelData(newModel, battleModelHumanData);
+                                ModLogger.Info("[Save]", "Called official npc.data.SetModelData(newModel, battleModelHumanData) successfully.");
+                            }
+                            catch (Exception smEx)
+                            {
+                                ModLogger.Warn("[Save]", "Error in SetModelData: " + smEx.Message);
+                            }
+
+                            // Sync modelData to both dynamic runtime (dynUnitData) AND persistent save data (unitData/propertyData)
+                            SyncModelDataToUnit(npc, newModel);
 
                             try
                             {
@@ -175,14 +187,86 @@ namespace NPCPortraitCustomizer.Patches
                                 ModLogger.Warn("[Save]", "Error saving modified traits: " + traitEx.Message);
                             }
 
-                            if (npc.data.unitData != null)
+                            try
                             {
-                                WorldUnitBase.CreateConf(npc.data.unitData);
+                                // Extract and save ALL selected Innate Destinies (先天气运) without 3-count limit
+                                var selectedDestinyIds = new List<int>();
+
+                                // Source 1: Check all UIBornLuckItem instances (supports 3, 9, or any number of items)
+                                var luckItems = __instance.GetComponentsInChildren<UIBornLuckItem>(true);
+                                if (luckItems != null && luckItems.Length > 0)
+                                {
+                                    foreach (var luckItem in luckItems)
+                                    {
+                                        if (luckItem == null || luckItem.item == null || luckItem.item.id <= 0) continue;
+                                        bool isSelected = false;
+                                        var tgl = luckItem.GetComponent<UnityEngine.UI.Toggle>() ?? luckItem.GetComponentInParent<UnityEngine.UI.Toggle>() ?? luckItem.GetComponentInChildren<UnityEngine.UI.Toggle>(true);
+                                        if (tgl != null && tgl.isOn) isSelected = true;
+                                        else if (luckItem.btnFateEffect != null && luckItem.btnFateEffect.activeSelf) isSelected = true;
+                                        else if (luckItem.lastOrder > 0) isSelected = true;
+
+                                        if (isSelected && !selectedDestinyIds.Contains(luckItem.item.id))
+                                        {
+                                            selectedDestinyIds.Add(luckItem.item.id);
+                                        }
+                                    }
+                                }
+
+                                // Source 2: Check UICreatePlayerProperty lastClickBorn toggles
+                                var propUI = __instance.GetComponentInChildren<UICreatePlayerProperty>(true);
+                                if (propUI != null && propUI.lastClickBorn != null)
+                                {
+                                    foreach (var tgl in propUI.lastClickBorn)
+                                    {
+                                        if (tgl == null) continue;
+                                        var luckItem = tgl.GetComponent<UIBornLuckItem>() ?? tgl.GetComponentInParent<UIBornLuckItem>() ?? tgl.GetComponentInChildren<UIBornLuckItem>(true);
+                                        if (luckItem != null && luckItem.item != null && luckItem.item.id > 0)
+                                        {
+                                            if (!selectedDestinyIds.Contains(luckItem.item.id))
+                                                selectedDestinyIds.Add(luckItem.item.id);
+                                        }
+                                    }
+                                }
+
+                                // Source 3: Check playerData.unitData.propertyData.bornLuck (modified by 9-destiny mods)
+                                if (__instance.playerData?.unitData?.propertyData?.bornLuck != null)
+                                {
+                                    foreach (var ld in __instance.playerData.unitData.propertyData.bornLuck)
+                                    {
+                                        if (ld != null && ld.id > 0 && !selectedDestinyIds.Contains(ld.id))
+                                            selectedDestinyIds.Add(ld.id);
+                                    }
+                                }
+
+                                // Source 4: Fallback to existing NPC destinies if none selected in UI
+                                if (selectedDestinyIds.Count == 0)
+                                {
+                                    var existingIds = Patch_UICreatePlayer_Property.Patch_UICreatePlayerProperty_UpdatePropertyUI.GetUnitDestinyIds(npc);
+                                    if (existingIds != null && existingIds.Count > 0)
+                                    {
+                                        selectedDestinyIds.AddRange(existingIds);
+                                        ModLogger.Info("[Save]", $"Preserved {selectedDestinyIds.Count} existing NPC destinies.");
+                                    }
+                                }
+
+                                ModLogger.Info("[Save]", $"Extracted {selectedDestinyIds.Count} selected destinies: [{string.Join(", ", selectedDestinyIds)}]");
+
+                                if (selectedDestinyIds.Count > 0 && npc.data?.unitData?.propertyData != null)
+                                {
+                                    SyncDestiniesToUnit(npc, selectedDestinyIds);
+                                    ModLogger.Info("[Save]", $"Successfully synced NPC Destinies: [{string.Join(", ", selectedDestinyIds)}]");
+                                }
+                            }
+                            catch (Exception destEx)
+                            {
+                                ModLogger.Warn("[Save]", "Error saving modified destinies: " + destEx.Message);
                             }
 
+                            // Refresh combat and map models so battle avatar updates immediately
+                            RefreshUnitCombatAndMapModel(npc);
                             RefreshMapAndTownNpcPortraits(npc);
 
-                            ModLogger.Info("[Save]", "Successfully updated portrait model and name for NPC: " + npcId);
+                            ModLogger.Info("[Save]", "Successfully updated portrait model, combat model, destinies, and name for NPC: " + npcId);
                         }
 
                         ModMain.EditingNpcId = null;
@@ -229,6 +313,7 @@ namespace NPCPortraitCustomizer.Patches
                                     if (mapMain != null && mapMain.uiPlayerInfo != null)
                                     {
                                         try { mapMain.uiPlayerInfo.ResetUnitModel(); } catch { }
+                                        try { mapMain.uiPlayerInfo.OnPlayerEquipCloth(); } catch { }
                                         try { mapMain.uiPlayerInfo.UpdateUI(); } catch { }
                                         try { mapMain.uiPlayerInfo.UpdatePlayerInfo(); } catch { }
                                         try { mapMain.uiPlayerInfo.CorUpdateInfo(); } catch { }
@@ -258,44 +343,289 @@ namespace NPCPortraitCustomizer.Patches
                 return true;
             }
 
-            private static void RefreshMapAndTownNpcPortraits(WorldUnitBase npc)
+            private static void SetReflectedFieldOrProp(object target, string name, object value)
             {
+                if (target == null || string.IsNullOrEmpty(name) || value == null) return;
                 try
                 {
-                    if (g.world != null && g.world.playerUnit != null)
+                    var type = target.GetType();
+                    var flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+                    var f = type.GetField(name, flags);
+                    if (f != null && f.FieldType == value.GetType())
                     {
-                        Vector2Int pPoint = (npc != null && npc.data != null && npc.data.unitData != null)
-                            ? npc.data.unitData.GetPoint()
-                            : ((g.world.playerUnit != null && g.world.playerUnit.data != null && g.world.playerUnit.data.unitData != null) ? g.world.playerUnit.data.unitData.GetPoint() : Vector2Int.zero);
+                        f.SetValue(target, value);
+                        return;
+                    }
+                    var p = type.GetProperty(name, flags);
+                    if (p != null && p.CanWrite && p.PropertyType == value.GetType())
+                    {
+                        p.SetValue(target, value);
+                        return;
+                    }
+                }
+                catch { }
+            }
 
-                        var mapMains = UnityEngine.Object.FindObjectsOfType<UIMapMain>();
-                        if (mapMains != null)
+            private static void RefreshMapAndTownNpcPortraits(WorldUnitBase npc)
+            {
+                if (npc == null || npc.data == null) return;
+                try
+                {
+                    var mapMains = UnityEngine.Object.FindObjectsOfType<UIMapMain>();
+                    if (mapMains != null)
+                    {
+                        foreach (var mm in mapMains)
                         {
-                            foreach (var mm in mapMains)
-                            {
-                                if (mm == null) continue;
-                                try { mm.UpdateOpgroupUnitList(); } catch { }
-                            }
+                            if (mm == null) continue;
+                            try { mm.UpdateOpgroupUnitList(); } catch { }
                         }
+                    }
+                    ModLogger.Info("[Save]", "Refreshed map & town NPC avatar icons.");
+                }
+                catch (Exception ex)
+                {
+                    ModLogger.Warn("[Save]", $"Error refreshing NPC town icons: {ex.Message}");
+                }
+            }
 
-                        var allListItems = UnityEngine.Object.FindObjectsOfType<UINPCUnitInfoListItem>();
-                        if (allListItems != null)
-                        {
-                            foreach (var item in allListItems)
-                            {
-                                if (item == null) continue;
-                                try { item.InitData(pPoint); } catch { }
-                                try { item.UpdateUI(); } catch { }
-                                try { item.OnUpdateList(); } catch { }
-                            }
-                        }
-
-                        ModLogger.Info("[Save]", "Refreshed map & town NPC avatar icons.");
+            private static void RefreshUnitCombatAndMapModel(WorldUnitBase npc)
+            {
+                if (npc == null || npc.data == null) return;
+                try
+                {
+                    if (npc.data.unitData != null)
+                    {
+                        try { WorldUnitBase.CreateConf(npc.data.unitData); } catch { }
                     }
                 }
                 catch (Exception ex)
                 {
-                    ModLogger.Warn("[Save]", "Error refreshing map/town portraits: " + ex.Message);
+                    ModLogger.Warn("[Save]", $"Error in RefreshUnitCombatAndMapModel: {ex.Message}");
+                }
+            }
+
+            private static void CopyModelData(PortraitModelData src, PortraitModelData dst)
+            {
+                if (src == null || dst == null) return;
+                if (src.sex != 0) dst.sex = src.sex;
+                dst.hat       = src.hat;
+                dst.hair      = src.hair;
+                dst.hairFront = src.hairFront;
+                dst.head      = src.head;
+                dst.eyebrows  = src.eyebrows;
+                dst.eyes      = src.eyes;
+                dst.nose      = src.nose;
+                dst.mouth     = src.mouth;
+                dst.body      = src.body;
+                dst.back      = src.back;
+                dst.forehead  = src.forehead;
+                dst.faceFull  = src.faceFull;
+                dst.faceLeft  = src.faceLeft;
+                dst.faceRight = src.faceRight;
+            }
+
+            private static void SyncModelDataToUnit(WorldUnitBase npc, PortraitModelData newModel)
+            {
+                if (npc == null || npc.data == null || newModel == null) return;
+
+                // 1. Dynamic runtime model
+                if (npc.data.dynUnitData != null)
+                {
+                    if (npc.data.dynUnitData.modelData == null)
+                        npc.data.dynUnitData.modelData = new PortraitModelData();
+                    CopyModelData(newModel, npc.data.dynUnitData.modelData);
+                }
+
+                // 2. Persistent unitData / propertyData (saved to game save file)
+                if (npc.data.unitData != null)
+                {
+                    var unitDataObj = npc.data.unitData;
+                    TryCopyModelDataToObject(unitDataObj, newModel);
+
+                    if (unitDataObj.propertyData != null)
+                    {
+                        TryCopyModelDataToObject(unitDataObj.propertyData, newModel);
+                    }
+                }
+
+                // 3. Resolve official dressID for Spine combat and map models
+                try
+                {
+                    if (newModel.body > 0 && g.conf != null && g.conf.roleDress != null)
+                    {
+                        var dressItem = g.conf.roleDress.GetItem(newModel.body);
+                        if (dressItem != null && dressItem.dressID > 0)
+                        {
+                            int dressId = dressItem.dressID;
+                            if (npc.data.unitData?.propertyData != null)
+                            {
+                                SetReflectedFieldOrProp(npc.data.unitData.propertyData, "dressID", dressId);
+                                SetReflectedFieldOrProp(npc.data.unitData.propertyData, "dress", dressId);
+                            }
+                            if (npc.data.dynUnitData != null)
+                            {
+                                SetReflectedFieldOrProp(npc.data.dynUnitData, "dressID", dressId);
+                                SetReflectedFieldOrProp(npc.data.dynUnitData, "dress", dressId);
+                            }
+                            ModLogger.Info("[Save]", $"Resolved and synced official dressID={dressId} (ConfRoleDress id={newModel.body})");
+                        }
+                    }
+                }
+                catch (Exception dEx)
+                {
+                    ModLogger.Warn("[Save]", "Error resolving dressID from roleDress: " + dEx.Message);
+                }
+            }
+
+            private static void TryCopyModelDataToObject(object targetObj, PortraitModelData newModel)
+            {
+                if (targetObj == null) return;
+                try
+                {
+                    var type = targetObj.GetType();
+                    var flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+
+                    foreach (var field in type.GetFields(flags))
+                    {
+                        if (field.FieldType == typeof(PortraitModelData))
+                        {
+                            var currentVal = field.GetValue(targetObj) as PortraitModelData;
+                            if (currentVal == null)
+                            {
+                                currentVal = new PortraitModelData();
+                                field.SetValue(targetObj, currentVal);
+                            }
+                            CopyModelData(newModel, currentVal);
+                            ModLogger.Info("[Save]", $"Synced modelData to field '{field.Name}' on '{type.Name}'");
+                        }
+                    }
+
+                    foreach (var prop in type.GetProperties(flags))
+                    {
+                        if (prop.PropertyType == typeof(PortraitModelData) && prop.CanRead)
+                        {
+                            var currentVal = prop.GetValue(targetObj) as PortraitModelData;
+                            if (currentVal == null && prop.CanWrite)
+                            {
+                                currentVal = new PortraitModelData();
+                                try { prop.SetValue(targetObj, currentVal); } catch { }
+                            }
+                            if (currentVal != null)
+                            {
+                                CopyModelData(newModel, currentVal);
+                                ModLogger.Info("[Save]", $"Synced modelData to property '{prop.Name}' on '{type.Name}'");
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    ModLogger.Warn("[Save]", $"Error reflection syncing modelData: {ex.Message}");
+                }
+            }
+
+            private static void SyncDestiniesToUnit(WorldUnitBase npc, List<int> destinyIds)
+            {
+                if (npc == null || npc.data == null || destinyIds == null || destinyIds.Count == 0) return;
+                try
+                {
+                    var unitData = npc.data.unitData;
+                    if (unitData == null || unitData.propertyData == null) return;
+                    var prop = unitData.propertyData;
+
+                    // 1. Direct Assignment to PropertyData.bornLuck (Native Il2CppReferenceArray)
+                    var luckArray = new Il2CppReferenceArray<DataUnit.LuckData>(destinyIds.Count);
+                    for (int i = 0; i < destinyIds.Count; i++)
+                    {
+                        var ld = new DataUnit.LuckData();
+                        ld.id = destinyIds[i];
+                        luckArray[i] = ld;
+                    }
+                    prop.bornLuck = luckArray;
+                    ModLogger.Info("[Save]", $"Directly assigned prop.bornLuck array with {destinyIds.Count} items.");
+
+                    // 2. Fallback sync to any other fields via reflection
+                    var propType = prop.GetType();
+                    var flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+
+                    if (npc.data.dynUnitData != null)
+                    {
+                        try
+                        {
+                            var df = npc.data.dynUnitData.GetType().GetField("bornLuck", flags);
+                            df?.SetValue(npc.data.dynUnitData, luckArray);
+                        }
+                        catch { }
+                    }
+                    foreach (var field in propType.GetFields(flags))
+                    {
+                        string fName = field.Name.ToLower();
+                        if ((fName.Contains("bornluck") || fName.Contains("feature")) && field.Name != "bornLuck")
+                        {
+                            try
+                            {
+                                var val = field.GetValue(prop);
+                                if (val is Il2CppSystem.Collections.Generic.List<DataUnit.LuckData> luckDataList)
+                                {
+                                    luckDataList.Clear();
+                                    foreach (int id in destinyIds)
+                                    {
+                                        var ld = new DataUnit.LuckData();
+                                        ld.id = id;
+                                        luckDataList.Add(ld);
+                                    }
+                                }
+                                else if (val is Il2CppSystem.Collections.Generic.List<int> intList)
+                                {
+                                    intList.Clear();
+                                    foreach (int id in destinyIds) intList.Add(id);
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+
+                    // 4. Sync to Runtime npc.allLuck (So NPC profile UI displays new destinies immediately)
+                    if (npc.allLuck != null)
+                    {
+                        for (int i = npc.allLuck.Count - 1; i >= 0; i--)
+                        {
+                            var luck = npc.allLuck[i];
+                            if (luck != null && luck.luckConf != null && luck.luckConf.type == 1)
+                            {
+                                try { luck.Destroy(); } catch { }
+                                npc.allLuck.RemoveAt(i);
+                            }
+                        }
+
+                        foreach (int id in destinyIds)
+                        {
+                            var conf = g.conf.roleCreateFeature?.GetItem(id);
+                            if (conf != null)
+                            {
+                                var luckObj = new WorldUnitLuckBase();
+                                var ld = new DataUnit.LuckData();
+                                ld.id = id;
+                                try
+                                {
+                                    luckObj.Init(npc, ld, null);
+                                    luckObj.Create();
+                                }
+                                catch
+                                {
+                                    luckObj.unit = npc;
+                                    luckObj.luckConf = conf;
+                                    luckObj.luckData = ld;
+                                }
+                                npc.allLuck.Add(luckObj);
+                            }
+                        }
+                        ModLogger.Info("[Save]", $"Rebuilt npc.allLuck with {destinyIds.Count} Nature destinies.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    ModLogger.Warn("[Save]", "Error in SyncDestiniesToUnit: " + ex.Message);
                 }
             }
         }
